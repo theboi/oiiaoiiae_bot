@@ -1,0 +1,25 @@
+{
+  "name": "oiiaoiiae_bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@sparticuz/chromium": "^131.0.1",
+    "dotenv": "^16.4.7",
+    "fix-esm": "^1.0.1",
+    "got": "^14.4.5",
+    "node-telegram-bot-api": "^0.66.0",
+    "puppeteer-core": "^24.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node-telegram-bot-api": "^0.64.7",
+    "@types/puppeteer-core": "^5.4.0"
+
+  }
+}
