@@ -11,6 +11,20 @@ function timeout(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function downloadVideo(url: string, filePath: string, headers: any): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(filePath);
+    https.get(url, { headers }, (response) => {
+      response.pipe(file);
+      file.on("finish", () => {
+        file.close(() => { resolve(); });
+      });
+    }).on("error", (err) => {
+      fs.unlink(filePath, () => reject(err));
+    });
+  });
+}
+
 export default async (request, response) => {
   const browser = await puppeteer.launch({
     args: !!process.env.CHROME_EXECUTABLE_PATH
@@ -26,7 +40,6 @@ export default async (request, response) => {
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  let isInitial = true;
   // await page.setRequestInterception(true);
 
   try {
@@ -43,59 +56,35 @@ export default async (request, response) => {
       text: userURL,
     } = body.message;
 
+    page.on("response", async (response) => {
+      const contentType = response.headers()["content-type"]; // MIME Type
+      const contentLength = response.headers()["content-length"];
+      const url = response.url();
+
+      if (!(contentType === "video/mp4" && url.includes("webapp-prime.tiktok.com"))) return;
+
+      console.log("Content-Type:", contentType);
+      console.log("Content-Length:", contentLength);
+      console.log("URL:", url);
+      console.log("------------------------");
+      
+      const headers = response.request().headers();
+      const cookies = await page.cookies();
+      headers["Cookie"] = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
+
+      try {
+        await downloadVideo(url, "./temp.mp4", headers);
+        console.log("Video downloaded");
+        await bot.sendVideo(chatID, "temp.mp4", { width: 1080, height: 1920 });
+      } catch (err) {
+        console.error("Error downloading video:", err);
+      }
+    });
+
     await page.goto(userURL);
     await timeout(1000);
     await page.screenshot({ path: "./userURL.png" });
     console.log("Loaded userURL");
-
-    const element = await page.waitForSelector(
-      "div.tiktok-web-player > video > source:last-child"
-    );
-    if (!element) throw new Error("No video element found");
-    const sourceURL = await element.evaluate(
-      (el) => el.attributes["src"]["value"]
-    );
-    console.log(sourceURL);
-
-  //   page.on('request', (request) => {
-  //     // cancel any navigation requests after the initial page.goto
-  //     console.log("Request made");
-  //     if (request.isNavigationRequest() && request.headers()["content-type"] !== "video/mp4") {
-  //       console.log("Cancelling request");
-  //         return request.abort();
-  //     }
-  //     request.continue();
-  // });
-
-
-    page.on("response", async (response) => {
-      const contentType = response.headers()["content-type"]; // MIME Type
-      const contentLength = response.headers()["content-length"];
-
-      if (contentType !== "video/mp4" || !isInitial) return
-      console.log("Is video");
-      isInitial = false
-
-      console.log("Content-Type:", contentType);
-      console.log("Content-Length:", contentLength);
-      console.log("------------------------");
-
-      const buffer = await response.buffer();
-      
-      console.log("Writing file");
-      await fs.writeFile("./temp.mp4", buffer, (err) => {
-        if (err) throw err;
-      });
-      bot.sendVideo(chatID, "temp.mp4");
-    });
-
-    await page.goto(sourceURL);
-    await timeout(100000);
-    await page.screenshot({ path: "./sourceURL.png" });
-    console.log("Loaded sourceURL");
-    
-
-    await bot.sendMessage(chatID, sourceURL);
   } catch (error) {
     console.error("Error sending message");
     console.log(error.toString());
@@ -104,11 +93,3 @@ export default async (request, response) => {
   browser.close();
   response.send("OK");
 };
-
-// fs.writeFile('/Users/ryanthe/Dev/htmlContent2.txt', htmlContent, err => {
-//   if (err) {
-//     console.error(err);
-//   } else {
-//     // file written successfully
-//   }
-// });
