@@ -43,18 +43,19 @@ export default async (request, response) => {
   // await page.setRequestInterception(true);
 
   try {
-    const bot = new TelegramBot(process.env.TELEGRAM_TOKEN ?? "");
+    const bot = new TelegramBot(process.env.TELEGRAM_TOKEN ?? "MISSING_TOKEN");
 
     const { body } = request;
-
-    if (!body.message) throw new Error("No message");
-    if (!body.message.text.startsWith("https://vt.tiktok.com"))
-      throw new Error("Not a TikTok URL");
-
     const {
       chat: { id: chatID },
-      text: userURL,
+      text: userUrl,
     } = body.message;
+
+    if (!body.message) throw new Error("No message");
+    if (!userUrl.startsWith("https://vt.tiktok.com"))
+      throw new Error("Not a TikTok URL");
+
+    const userUrlId = userUrl.split("/")[3];
 
     page.on("response", async (response) => {
       const contentType = response.headers()["content-type"]; // MIME Type
@@ -73,17 +74,17 @@ export default async (request, response) => {
       headers["Cookie"] = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
 
       try {
-        await downloadVideo(url, "./temp.mp4", headers);
+        await downloadVideo(url, `./${userUrlId}.mp4`, headers);
         console.log("Video downloaded");
-        await bot.sendVideo(chatID, "temp.mp4", { width: 1080, height: 1920 });
+        await bot.sendVideo(chatID, `${userUrlId}.mp4`, { width: 1080, height: 1920 });
       } catch (err) {
         console.error("Error downloading video:", err);
       }
     });
 
-    await page.goto(userURL);
-    await timeout(1000);
-    await page.screenshot({ path: "./userURL.png" });
+    await page.goto(userUrl);
+    // await timeout(1000);
+    // await page.screenshot({ path: "./userURL.png" });
     console.log("Loaded userURL");
   } catch (error) {
     console.error("Error sending message");
