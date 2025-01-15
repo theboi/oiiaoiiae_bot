@@ -98,10 +98,18 @@ export default async (request, response) => {
         console.log("Downloading video");
         console.log("tmp path:", downloadPath);
         await downloadVideo(url, downloadPath, headers);
-        console.log("Video downloaded, sending video");
+        console.log("Video downloaded");
+
+        const captionElement = await page.waitForSelector(`span[data-e2e="new-desc-span"]`)
+        const caption = await page.evaluate(el => el?.textContent, captionElement)
+        console.log("Caption:", caption);
+
+        console.log("Sending video");
         await bot.sendVideo(chatID, downloadPath, {
           width: 1080,
           height: 1920,
+          caption: caption ?? undefined,
+          reply_to_message_id: body.message.message_id,
         });
         console.log("Video sent");
       } catch (err) {
@@ -110,8 +118,7 @@ export default async (request, response) => {
     });
 
     await page.goto(userUrl, { waitUntil: "networkidle0" });
-    // await page.waitForSelector(`div.tiktok-web-player > video > source:not([src=""]`);
-    // await page.screenshot({ path: "./userURL.png" });
+    await page.screenshot({ path: "./userURL.png" });
     console.log("Loaded userURL");
   } catch (error) {
     console.error("Error sending message");
