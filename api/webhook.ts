@@ -100,15 +100,15 @@ export default async (request, response) => {
         await downloadVideo(url, downloadPath, headers);
         console.log("Video downloaded");
 
-        const captionElement = await page.waitForSelector(`span[data-e2e="new-desc-span"]`)
-        const caption = await page.evaluate(el => el?.textContent, captionElement)
-        console.log("Caption:", caption);
+        // const captionElement = await page.waitForSelector(`span[data-e2e="new-desc-span"]`)
+        // const caption = await page.evaluate(el => el?.textContent, captionElement)
+        // console.log("Caption:", caption);
 
         console.log("Sending video");
         await bot.sendVideo(chatID, downloadPath, {
           width: 1080,
           height: 1920,
-          caption: caption ?? undefined,
+          // caption: caption ?? undefined,
           reply_to_message_id: body.message.message_id,
         });
         console.log("Video sent");
