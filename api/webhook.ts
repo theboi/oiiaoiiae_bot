@@ -36,11 +36,13 @@ function downloadVideo(
 
 export default async (request, response) => {
   console.log("Starting browser");
-  const isProduction = process.env.VERCEL_ENV === 'production'
+  const isProduction = process.env.VERCEL_ENV === "production";
   const browser = await puppeteer.launch({
     args: isProduction ? chromium.args : puppeteer.defaultArgs(),
     defaultViewport: chromium.defaultViewport,
-    executablePath: isProduction ? await chromium.executablePath() : process.env.CHROME_EXECUTABLE_PATH,
+    executablePath: isProduction
+      ? await chromium.executablePath()
+      : process.env.CHROME_EXECUTABLE_PATH,
     headless: chromium.headless,
   });
 
@@ -62,7 +64,9 @@ export default async (request, response) => {
       throw new Error("Not a TikTok URL");
 
     const userUrlId = userUrl.split("/")[3];
-    const downloadPath = isProduction ? `/tmp/${userUrlId}.mp4` : `./tmp/${userUrlId}.mp4`;
+    const downloadPath = isProduction
+      ? `/tmp/${userUrlId}.mp4`
+      : `./tmp/${userUrlId}.mp4`;
 
     // Ensure the directory exists
     fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
@@ -72,7 +76,12 @@ export default async (request, response) => {
       const contentLength = response.headers()["content-length"];
       const url = response.url();
 
-      if (!(contentType === "video/mp4" && url.includes("webapp-prime.tiktok.com"))) return;
+      if (
+        !(
+          contentType === "video/mp4" && url.includes("webapp-prime.tiktok.com")
+        )
+      )
+        return;
 
       console.log("Content-Type:", contentType);
       console.log("Content-Length:", contentLength);
@@ -100,8 +109,7 @@ export default async (request, response) => {
       }
     });
 
-    await page.goto(userUrl);
-    await timeout(1000); // TODO: Find a better way to wait for the video to load
+    await page.goto(userUrl, { waitUntil: "networkidle0" });
     // await page.waitForSelector(`div.tiktok-web-player > video > source:not([src=""]`);
     // await page.screenshot({ path: "./userURL.png" });
     console.log("Loaded userURL");
