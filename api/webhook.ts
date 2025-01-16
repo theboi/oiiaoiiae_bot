@@ -116,10 +116,10 @@ export default async (request, response) => {
         console.error("Error downloading video:", err);
       }
     });
-
+    
     await page.goto(userUrl, { waitUntil: "networkidle0" });
-    await page.screenshot({ path: "./userURL.png" });
-    console.log("Loaded userURL");
+    if (!isProduction) await page.screenshot({ path: "./userUrl.png" });
+    console.log("Loaded userUrl");
   } catch (error) {
     console.error("Error sending message");
     console.log(error.toString());
