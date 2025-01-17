@@ -34,7 +34,7 @@ function downloadVideo(
   });
 }
 
-export default async (request, response) => {
+export default async (wsRequest, wsResponse) => {
   console.log("Starting browser");
   const isProduction = process.env.VERCEL_ENV === "production";
   const browser = await puppeteer.launch({
@@ -53,7 +53,7 @@ export default async (request, response) => {
   try {
     const bot = new TelegramBot(process.env.TELEGRAM_TOKEN ?? "MISSING_TOKEN");
 
-    const { body } = request;
+    const { body } = wsRequest;
     const {
       chat: { id: chatID },
       text: userUrl,
@@ -71,24 +71,20 @@ export default async (request, response) => {
     // Ensure the directory exists
     fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
 
-    page.on("response", async (response) => {
-      const contentType = response.headers()["content-type"]; // MIME Type
-      const contentLength = response.headers()["content-length"];
-      const url = response.url();
+    page.on("response", async (pupResponse) => {
+      const contentType = pupResponse.headers()["content-type"]; // MIME Type
+      const contentLength = pupResponse.headers()["content-length"];
+      const url = pupResponse.url();
 
-      if (
-        !(
-          contentType === "video/mp4" && url.includes("webapp-prime.tiktok.com")
-        )
-      )
-        return;
+      if (!(contentType === "video/mp4" && url.includes("webapp-prime.tiktok.com"))) return;
+      //
 
       console.log("Content-Type:", contentType);
       console.log("Content-Length:", contentLength);
       console.log("URL:", url);
       console.log("------------------------");
 
-      const headers = response.request().headers();
+      const headers = pupResponse.request().headers();
       const cookies = await page.cookies();
       headers["Cookie"] = cookies
         .map((cookie) => `${cookie.name}=${cookie.value}`)
@@ -112,19 +108,19 @@ export default async (request, response) => {
           reply_to_message_id: body.message.message_id,
         });
         console.log("Video sent");
+        wsResponse.send("OK"); //TODO: Fix "navigating frame was detached error", need to refactor async code
       } catch (err) {
         console.error("Error downloading video:", err);
       }
     });
     
-    await page.goto(userUrl, { waitUntil: "networkidle0" });
+    await page.goto(userUrl, { waitUntil: "networkidle0", timeout: 7_000 });
     if (!isProduction) await page.screenshot({ path: "./userUrl.png" });
     console.log("Loaded userUrl");
-  } catch (error) {
-    console.error("Error sending message");
-    console.log(error.toString());
+
+  } catch (err) {
+    console.error("Error sending message: ", err);
   }
   console.log("Closing browser");
   browser.close();
-  response.send("OK");
 };
