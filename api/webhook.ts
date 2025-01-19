@@ -37,6 +37,19 @@ function downloadVideo(
 export default async (wsRequest, wsResponse) => {
   console.log("Starting browser");
   const isProduction = process.env.VERCEL_ENV === "production";
+  const {
+    chat: { id: chatID },
+    text: tiktokURL,
+    message_id: messageID,
+  } = wsRequest.body.message;
+
+  console.log(tiktokURL);
+  if (!tiktokURL.startsWith("https://vt.tiktok.com")) {
+    console.log("Not a TikTok URL");
+    wsResponse.send("NA");
+    return;
+  }
+
   const browser = await puppeteer.launch({
     args: isProduction ? chromium.args : puppeteer.defaultArgs(),
     defaultViewport: chromium.defaultViewport,
@@ -45,55 +58,46 @@ export default async (wsRequest, wsResponse) => {
       : process.env.CHROME_EXECUTABLE_PATH,
     headless: chromium.headless,
   });
-
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720 });
-  // await page.setRequestInterception(true);
 
   try {
     const bot = new TelegramBot(process.env.TELEGRAM_TOKEN ?? "MISSING_TOKEN");
 
-    const { body } = wsRequest;
-    const {
-      chat: { id: chatID },
-      text: userUrl,
-    } = body.message;
-
-    if (!body.message) throw new Error("No message");
-    if (!userUrl.startsWith("https://vt.tiktok.com"))
-      throw new Error("Not a TikTok URL");
-
-    const userUrlId = userUrl.split("/")[3];
+    const tiktokID = tiktokURL.split("/")[3];
     const downloadPath = isProduction
-      ? `/tmp/${userUrlId}.mp4`
-      : `./tmp/${userUrlId}.mp4`;
+      ? `/tmp/${tiktokID}.mp4`
+      : `./tmp/${tiktokID}.mp4`;
+    fs.mkdirSync(path.dirname(downloadPath), { recursive: true }); // ensures the directory exists for Vercel deployment
 
-    // Ensure the directory exists
-    fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
+    const pageResponsePromise = new Promise<void>(async (resolve, reject) => {
+      page.on("response", async (pupResponse) => {
+        const contentType = pupResponse.headers()["content-type"];
+        const contentLength = pupResponse.headers()["content-length"];
+        const sourceURL = pupResponse.url();
 
-    page.on("response", async (pupResponse) => {
-      const contentType = pupResponse.headers()["content-type"]; // MIME Type
-      const contentLength = pupResponse.headers()["content-length"];
-      const url = pupResponse.url();
+        if (
+          !(
+            contentType === "video/mp4" &&
+            sourceURL.includes("webapp-prime.tiktok.com")
+          )
+        )
+          return;
 
-      if (!(contentType === "video/mp4" && url.includes("webapp-prime.tiktok.com"))) return;
-      //
+        console.log("Content-Type:", contentType);
+        console.log("Content-Length:", contentLength);
+        console.log("URL:", sourceURL);
+        console.log("------------------------");
 
-      console.log("Content-Type:", contentType);
-      console.log("Content-Length:", contentLength);
-      console.log("URL:", url);
-      console.log("------------------------");
+        const headers = pupResponse.request().headers();
+        const cookies = await page.cookies();
+        headers["Cookie"] = cookies
+          .map((cookie) => `${cookie.name}=${cookie.value}`)
+          .join("; ");
 
-      const headers = pupResponse.request().headers();
-      const cookies = await page.cookies();
-      headers["Cookie"] = cookies
-        .map((cookie) => `${cookie.name}=${cookie.value}`)
-        .join("; ");
-
-      try {
         console.log("Downloading video");
         console.log("tmp path:", downloadPath);
-        await downloadVideo(url, downloadPath, headers);
+        await downloadVideo(sourceURL, downloadPath, headers);
         console.log("Video downloaded");
 
         // const captionElement = await page.waitForSelector(`span[data-e2e="new-desc-span"]`)
@@ -105,22 +109,37 @@ export default async (wsRequest, wsResponse) => {
           width: 1080,
           height: 1920,
           // caption: caption ?? undefined,
-          reply_to_message_id: body.message.message_id,
+          reply_to_message_id: messageID,
         });
         console.log("Video sent");
-        wsResponse.send("OK"); //TODO: Fix "navigating frame was detached error", need to refactor async code
-      } catch (err) {
-        console.error("Error downloading video:", err);
-      }
+
+        resolve();
+      });
+
+      await page.goto(tiktokURL, { waitUntil: "load" });
+      await timeout(10_000);
+      reject("timeout");
     });
-    
-    await page.goto(userUrl, { waitUntil: "networkidle0", timeout: 7_000 });
+
+    try {
+      await pageResponsePromise;
+    } catch (err) {
+      if (err === "timeout") {
+        console.log("Timeout occurred");
+        wsResponse.send("No video found/timeout occurred");
+        return;
+      }
+    }
+
     if (!isProduction) await page.screenshot({ path: "./userUrl.png" });
     console.log("Loaded userUrl");
 
+    wsResponse.send("OK");
   } catch (err) {
     console.error("Error sending message: ", err);
+    wsResponse.send("Error occurred");
+  } finally {
+    console.log("Closing browser");
+    browser.close();
   }
-  console.log("Closing browser");
-  browser.close();
 };
