@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import fs from "node:fs";
-import puppeteer, { Browser } from "puppeteer-core";
+import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import dotenv from "dotenv";
 import https from "https";
@@ -39,13 +39,14 @@ export default async (wsRequest, wsResponse) => {
   const isProduction = process.env.VERCEL_ENV === "production";
   const {
     chat: { id: chatID },
-    text: tiktokURL,
+    text: messageText,
     message_id: messageID,
   } = wsRequest.body.message;
 
+  const tiktokURL: string = messageText.match(/https:\/\/vt\.tiktok\.com\/\S*/m)?.[0];
   console.log(tiktokURL);
-  if (!tiktokURL.startsWith("https://vt.tiktok.com")) {
-    console.log("Not a TikTok URL");
+  if (tiktokURL === undefined) {
+    console.log("No TikTok URL found");
     wsResponse.send("NA");
     return;
   }
@@ -125,8 +126,8 @@ export default async (wsRequest, wsResponse) => {
       await pageResponsePromise;
     } catch (err) {
       if (err === "timeout") {
-        console.log("Timeout occurred");
-        wsResponse.send("No video found/timeout occurred");
+        console.log("No video found/timeout occurred");
+        wsResponse.send("NA/timeout");
         return;
       }
     }

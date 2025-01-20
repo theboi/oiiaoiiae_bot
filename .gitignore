@@ -137,3 +137,6 @@ dist
 
 # Vercel
 .vercel
+
+# Misc
+tmp/*
